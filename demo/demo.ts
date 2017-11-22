@@ -1,14 +1,14 @@
-import { Box, LayoutMechanism } from '../src/box'
+import { customLayoutFactory, CustomConfig } from '../src/box'
 
-const root = Box.create({
-  layoutMechanism: LayoutMechanism.Horizontal
-});
+const rootConfig: CustomConfig = {
+  layout: ({ dimensions, boxes }) => ({ updates: [] })
+}
 
-(window as any).root = root;
+interface Labelled {
+  label: string
+}
 
-(window as any).c1 = root.addBox({
-  layoutMechanism: LayoutMechanism.Vertical,
-  width: 200,
-  height: 200
-})
-console.log('DEMO', root)
+const rootBox = customLayoutFactory<Labelled>(rootConfig)()
+
+
+console.log(rootBox)
