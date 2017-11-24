@@ -1,4 +1,5 @@
-import { Observable, BehaviorSubject } from 'rxjs'
+import { Observable } from 'rxjs/Observable'
+import { BehaviorSubject } from 'rxjs/BehaviorSubject'
 
 export type ValueStreamOrBehavior<T> = {
   [P in keyof T]: T[P] | Observable<T[P]> | BehaviorSubject<T[P]>
@@ -15,25 +16,40 @@ export interface Gutter {
   right: number
 }
 export type GutterPartial = Partial<Gutter>
-export type NumberOrGutter = number | GutterPartial
+export type NumberOrGutterPartial = number | GutterPartial
 
-export interface DimensionsBase {
-  x: number
+export interface Position {
+  x: number,
   y: number
-  widthOuter: number
-  heightOuter: number
-  margin: Gutter
-  padding: Gutter
 }
 
-export interface Dimensions extends DimensionsBase {
+export interface Size {
+  width: number,
+  height: number
+}
+
+export interface SizeOuter {
+  widthOuter: number,
+  heightOuter: number
+}
+
+export interface SizeInner {
   readonly widthInner: number,
   readonly heightInner: number
 }
 
-export type DimensionsBasePartial = Partial<DimensionsBase>
+export interface Gutters {
+  margin: Gutter
+  padding: Gutter
+}
 
-export interface Params extends Partial<ValueStreamOrBehavior<DimensionsBase>> {}
+export interface DimensionsSettable extends Position, SizeOuter, Gutters {}
+
+export interface Dimensions extends DimensionsSettable, SizeInner {}
+
+export type DimensionsBasePartial = Partial<DimensionsSettable>
+
+export interface Params extends Partial<ValueStreamOrBehavior<DimensionsSettable>> {}
 
 export interface Box<ChildInfo, Info> extends Dimensions {
   readonly $: Readonly<Streamify<Dimensions>>
@@ -43,6 +59,6 @@ export interface Box<ChildInfo, Info> extends Dimensions {
   readonly boxes: Box<ChildInfo, any>[]
   readonly boxes$: Observable<Box<ChildInfo, any>[]>
 
-  addBox (b: Box<ChildInfo, any>): boolean
-  removeBox (b: Box<ChildInfo, any>): boolean
+  addBox (b: Box<any, ChildInfo>): boolean
+  removeBox (b: Box<any, ChildInfo>): boolean
 }
