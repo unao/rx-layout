@@ -62,8 +62,8 @@ export interface CustomConfig<I = undefined> extends Partial<CustomConfigOptiona
   layout: LayoutFn<I>
 }
 
-const handleBehaviorAndStream = <V>(box, settable, propName: string, [behavior, stream]: [BehaviorSubject<V>, Observable<V>]) => {
-  if (settable) { box.$[propName] = stream }
+const handleBehaviorAndStream = <V>(box: Box<any, any>, settable: boolean, propName: string, [behavior, stream]: [BehaviorSubject<V>, Observable<V>]) => {
+  if (settable) { (box.$ as any)[propName] = stream }
   if (settable) {
     Object.defineProperty(box, propName, { get: () => behavior.value, set: v => v !== behavior.value && behavior.next(v) })
   } else {
@@ -117,8 +117,8 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
           return boxesBehavior.value
         },
         boxes$: boxesBehavior.asObservable(),
-        addBox: (b) => boxesBehavior.next(boxesBehavior.value.concat(b)) || true,
-        removeBox: (b) => true
+        addBox: (b: Box<any, any>) => boxesBehavior.next(boxesBehavior.value.concat(b)) || true,
+        removeBox: (b: Box<any, any>) => true
       })
 
     SETTEABLE_NUMBER_VALUE_NAMES.forEach(prop =>
@@ -130,7 +130,7 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
 
     const [widthInnerBehavior, heightInnerBehavior] = GETTABLE_NUMBER_VALUE_NAMES.map(prop =>
       handleBehaviorAndStream<number>(box, false, prop,
-        paramValueToBehaviorAndStream<number, number>(p[prop], defaultNumber, x => x)))
+        paramValueToBehaviorAndStream<number, number>(defaultNumber, defaultNumber, x => x)))
 
     const innerSize = boxesBehavior.pipe(
       tap((bs) => console.log('BOXES', bs)),
@@ -143,7 +143,7 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
           merge(Observable.combineLatest(box.$.widthOuter, box.$.heightOuter)),
           debounceTime(0),
           map(() => config.layout(box, boxes)),
-          tap(x => console.log('UPDATES', x)),
+          tap(x => console.log('UPDATES', Date.now(), x)),
           tap(x => {
             x.updates.forEach((u, idx) => Object.assign(boxes[idx], u))
             const inner = x.inner || defaultInner(defaultNumber)(boxes)
