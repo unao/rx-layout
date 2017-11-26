@@ -11,7 +11,7 @@ import { share } from 'rxjs/operators/share'
 import 'rxjs/add/observable/combineLatest'
 
 import {
-  Box, Params, Streamify, DimensionsSettable, Dimensions,
+  Box, Params, Streamify, ToBoolean, DimensionsSettable, Dimensions, InsertBox,
   Gutters, Gutter, NumberOrGutterPartial,
   Size, SizeOuter, SizeInner, Position
 } from './box.types'
@@ -56,7 +56,7 @@ export interface CustomConfigOptionals {
   infoRequired: boolean
   defaultNumber: number
   // debounceChangesMs: number,
-  bindOuterToInner: Partial<Size>
+  bindOuterToInner: boolean | ToBoolean<Size>
 }
 export interface CustomConfig<I = undefined> extends Partial<CustomConfigOptionals> {
   layout: LayoutFn<I>
@@ -65,9 +65,16 @@ export interface CustomConfig<I = undefined> extends Partial<CustomConfigOptiona
 const handleBehaviorAndStream = <V>(box: Box<any, any>, settable: boolean, propName: string, [behavior, stream]: [BehaviorSubject<V>, Observable<V>]) => {
   if (settable) { (box.$ as any)[propName] = stream }
   if (settable) {
-    Object.defineProperty(box, propName, { get: () => behavior.value, set: v => v !== behavior.value && behavior.next(v) })
+    Object.defineProperty(box, propName, {
+      enumerable: true, configurable: true,
+      get: () => behavior.value,
+      set: v => v !== behavior.value && behavior.next(v)
+    })
   } else {
-    Object.defineProperty(box, propName, { get: () => behavior.value })
+    Object.defineProperty(box, propName, {
+      enumerable: true, configurable: true,
+      get: () => behavior.value
+    })
   }
   return behavior
 }
@@ -92,13 +99,48 @@ const paramValueToBehaviorAndStream = <In, Out>(value: In | Observable<Out> | Be
 const interpretOptional = (c: CustomConfig): CustomConfigOptionals => ({
   infoRequired: !!c.infoRequired,
   defaultNumber: c.defaultNumber !== undefined ? c.defaultNumber : 0,
-  bindOuterToInner: Object.assign({ width: false, height: false }, c.bindOuterToInner)
+  bindOuterToInner: Object.assign({ width: false, height: false }, c.bindOuterToInner && { width: true, height: true })
   // debounceChangesMs: c.debounceChangesMs || 0
 })
 
+const insertBoxRaw = <ChildInfo>(parent: Box<ChildInfo, any>, boxesBehavior: BehaviorSubject<Array<Box<ChildInfo, any>>>): InsertBox<ChildInfo> =>
+  (newBox, where) => {
+    const boxes = parent.boxes
+    if (boxes.indexOf(newBox) > -1) {
+      return false
+    }
+
+    let insertAt
+    if (where === undefined) {
+      insertAt = boxes.length
+    } else if (typeof where === 'number') {
+      if (!(where >= 0 && where <= boxes.length)) {
+        return false
+      }
+      insertAt = where
+    } else {
+      const { box, position } = where
+      const bIndex = boxes.indexOf(box)
+      if (bIndex === -1) {
+        return false
+      }
+      insertAt = bIndex + position
+    }
+
+    if (newBox.parent) {
+      newBox.parent.removeBox(newBox)
+    }
+    (newBox as any).parent = parent
+    boxes.splice(insertAt, 0, newBox)
+    boxesBehavior.next(boxes)
+    return true
+  }
+
 export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: CustomConfig) =>
   (p: Params & { info?: Info } = {}): Box<ChildInfo, Info> => {
-    const { defaultNumber, infoRequired, bindOuterToInner } = interpretOptional(config)
+    const cfg = interpretOptional(config)
+    const { defaultNumber, infoRequired } = cfg
+    const bindOuterToInner = cfg.bindOuterToInner as ToBoolean<Size>
 
     if (infoRequired && p.info === undefined) {
       throw new Error('Missing "info".')
@@ -108,17 +150,26 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
 
     // the construction follows Box interface
     // it is done in a dynamic way so type safety is only approximated
+    const boxBase = {}
     const box = Object.assign(
-      {} as Dimensions,
+      boxBase as Dimensions,
       {
         $: ({} as Readonly<Streamify<Dimensions>>),
         info: (p.info as Info), // if infoRequired not true no guarantee
         get boxes () {
-          return boxesBehavior.value
+          return boxesBehavior.value.concat([])
         },
         boxes$: boxesBehavior.asObservable(),
-        addBox: (b: Box<any, any>) => boxesBehavior.next(boxesBehavior.value.concat(b)) || true,
-        removeBox: (b: Box<any, any>) => true
+        insertBox: insertBoxRaw(boxBase as Box<ChildInfo, any>, boxesBehavior),
+        removeBox: (b: Box<any, ChildInfo> | number) => {
+          const bs = (boxBase as Box<any, any>).boxes
+          const idx = typeof b === 'number' ? b : bs.indexOf(b)
+          if (idx === -1) return false
+          bs.splice(idx, 1)
+          delete (boxBase as any).parent
+          boxesBehavior.next(bs)
+          return true
+        }
       })
 
     SETTEABLE_NUMBER_VALUE_NAMES.forEach(prop =>
@@ -149,10 +200,6 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
             const inner = x.inner || defaultInner(defaultNumber)(boxes)
             widthInnerBehavior.next(inner.width)
             heightInnerBehavior.next(inner.height)
-            if (bindOuterToInner) {
-              box.widthOuter = inner.width
-              box.heightOuter = inner.height
-            }
           }),
           filter(() => false)
           )
@@ -162,6 +209,25 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
 
     (box as any).$.widthInner = innerSize.pipe(merge(widthInnerBehavior));
     (box as any).$.heightInner = innerSize.pipe(merge(heightInnerBehavior))
+    if (bindOuterToInner.width) {
+      (box as any).$.widthOuter = (box as any).$.widthInner
+      Object.defineProperty(box, 'widthOuter',
+        {
+          set: (x) => {
+            throw new Error('Cannot set widthOuter, when bound to widthInner')
+          }, get: () => widthInnerBehavior.value
+        })
+    }
+
+    if (bindOuterToInner.height) {
+      (box as any).$.heightOuter = (box as any).$.heightInner
+      Object.defineProperty(box, 'heightOuter',
+        {
+          set: (x) => {
+            throw new Error('Cannot set heightOuter, when bound to heightInner')
+          }, get: () => heightInnerBehavior.value
+        })
+    }
 
     return box
   }

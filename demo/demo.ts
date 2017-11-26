@@ -9,7 +9,8 @@ const rootConfig: CustomConfig = {
     console.log('LAYOUT', box, boxes)
     return { updates: [] }
   },
-  defaultNumber: 0
+  defaultNumber: 0,
+  bindOuterToInner: { width: true, height: true }
 }
 
 interface Labelled {
@@ -26,12 +27,12 @@ const rootBox = customLayoutFactory<Labelled>(rootConfig)({
 //   .do(x => console.log('OUTER', x))
 //   .subscribe()
 
-$.combineLatest(rootBox.$.widthInner, rootBox.$.heightInner)
+$.combineLatest(rootBox.$.widthOuter, rootBox.$.heightInner)
   .debounceTime(0)
-  .do(x => console.log('INNER', x))
+  .do(x => console.log('OUTER', x))
   .subscribe()
 
-const header = customLayoutFactory<any, Labelled>({ layout: () => ({ updates: [] }) })()
+const header = customLayoutFactory<any, Labelled>({ layout: () => ({ updates: [] }) })({ info: { label: 'header' } })
 const main = customLayoutFactory<any, Labelled>({ layout: () => ({ updates: [] }) })()
 const side = customLayoutFactory<any, Labelled>({ layout: () => ({ updates: [] }) })()
 
@@ -41,6 +42,12 @@ main.x = 200
 main.widthOuter = 1000
 main.margin.right = 20
 
-rootBox.addBox(header)
-rootBox.addBox(main)
-rootBox.addBox(side)
+rootBox.insertBox(header)
+rootBox.insertBox(main)
+rootBox.insertBox(side)
+
+rootBox.insertBox(header)
+rootBox.insertBox(main)
+rootBox.insertBox(side)
+
+setTimeout(() => rootBox.removeBox(side), 1000)

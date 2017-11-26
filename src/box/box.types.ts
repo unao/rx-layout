@@ -9,14 +9,18 @@ export type Streamify<T> = {
   [P in keyof T]: Observable<T[P]>
 }
 
+export type ToBoolean<T> = {
+  [P in keyof T]: boolean
+}
+
 export interface Gutter {
   top: number,
   bottom: number
   left: number,
   right: number
 }
-export type GutterPartial = Partial<Gutter>
-export type NumberOrGutterPartial = number | GutterPartial
+
+export type NumberOrGutterPartial = number | Partial<Gutter>
 
 export interface Position {
   x: number,
@@ -43,13 +47,25 @@ export interface Gutters {
   padding: Gutter
 }
 
-export interface DimensionsSettable extends Position, SizeOuter, Gutters {}
+export interface DimensionsSettable extends Position, SizeOuter, Gutters { }
 
-export interface Dimensions extends DimensionsSettable, SizeInner {}
+export interface Dimensions extends DimensionsSettable, SizeInner { }
 
 export type DimensionsBasePartial = Partial<DimensionsSettable>
 
-export interface Params extends Partial<ValueStreamOrBehavior<DimensionsSettable>> {}
+export interface Params extends Partial<ValueStreamOrBehavior<DimensionsSettable>> { }
+
+export enum InsertPosition {
+  Before = 0,
+  After = 1
+}
+
+export interface InsertBox<ChildInfo> {
+  (box: Box<any, ChildInfo>, where?: {
+    box: Box<any, ChildInfo>,
+    position: InsertPosition
+  }): boolean
+}
 
 export interface Box<ChildInfo, Info> extends Dimensions {
   readonly $: Readonly<Streamify<Dimensions>>
@@ -59,6 +75,6 @@ export interface Box<ChildInfo, Info> extends Dimensions {
   readonly boxes: Box<ChildInfo, any>[]
   readonly boxes$: Observable<Box<ChildInfo, any>[]>
 
-  addBox (b: Box<any, ChildInfo>): boolean
-  removeBox (b: Box<any, ChildInfo>): boolean
+  insertBox: InsertBox<ChildInfo>
+  removeBox (box: Box<any, ChildInfo> | number): boolean
 }
