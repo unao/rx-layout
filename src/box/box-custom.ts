@@ -43,12 +43,13 @@ export const defaultInner = (defaultNumber: number) => (boxes: Array<Readonly<Di
   }
 }
 
+export type LayoutUpdates = Array<Readonly<Partial<DimensionsSettable>>>
 export interface LayoutFn<I> {
   (box: Readonly<DimensionsSettable>, boxes: Array<Readonly<DimensionsSettable & { info: I }>>): {
     // if absent default will be calculated by default mechanism
     inner?: Size
     // the length of updates MUST match the length of boxes
-    updates: Array<Readonly<DimensionsSettable>>
+    updates: LayoutUpdates
   }
 }
 
@@ -136,7 +137,7 @@ const insertBoxRaw = <ChildInfo>(parent: Box<ChildInfo, any>, boxesBehavior: Beh
     return true
   }
 
-export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: CustomConfig) =>
+export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: CustomConfig<any>) =>
   (p: Params & { info?: Info } = {}): Box<ChildInfo, Info> => {
     const cfg = interpretOptional(config)
     const { defaultNumber, infoRequired } = cfg
@@ -184,7 +185,6 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
         paramValueToBehaviorAndStream<number, number>(defaultNumber, defaultNumber, x => x)))
 
     const innerSize = boxesBehavior.pipe(
-      tap((bs) => console.log('BOXES', bs)),
       switchMap(boxes =>
         Observable.combineLatest(...boxes
           .map(b =>
@@ -194,8 +194,10 @@ export const customLayoutFactory = <ChildInfo = any, Info = undefined>(config: C
           merge(Observable.combineLatest(box.$.widthOuter, box.$.heightOuter)),
           debounceTime(0),
           map(() => config.layout(box, boxes)),
-          tap(x => console.log('UPDATES', Date.now(), x)),
           tap(x => {
+            if (x.updates.length !== boxes.length) {
+              throw new Error('Incorrect layout function. Updates must match boxes.')
+            }
             x.updates.forEach((u, idx) => Object.assign(boxes[idx], u))
             const inner = x.inner || defaultInner(defaultNumber)(boxes)
             widthInnerBehavior.next(inner.width)
